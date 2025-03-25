@@ -1,0 +1,40 @@
+@dp.callback_query_handler(lambda c: c.data == "get_next_group")
+async def get_next_group(callback_query: types.CallbackQuery):
+    global global_group_index  # Используем глобальный индекс
+    user_id = callback_query.from_user.id
+
+    # Проверяем, есть ли группы для отправки
+    if not groups_data:
+        await bot.answer_callback_query(callback_query.id, "Группы еще не созданы. Сначала выполните команду /run.")
+        return
+
+    # Если у пользователя уже есть индекс, берем следующий, иначе назначаем новый
+    if user_id in current_group_index:
+        group_index = current_group_index[user_id] + 1
+    else:
+        group_index = global_group_index  # Новый пользователь получает следующую доступную ссылку
+
+    # Проверяем, не закончились ли группы
+    if group_index >= len(groups_data):
+        await bot.answer_callback_query(callback_query.id, "Группы закончились. Больше нет новых ссылок.")
+        return
+
+    # Назначаем пользователю уникальную группу
+    group = groups_data[group_index]
+    club_url, active_admins = group[0]
+    group_message = f"{club_url} ({active_admins} активных админов)"
+    await bot.send_message(user_id, f"Ваша группа:\n{group_message}")
+
+    # Запоминаем, какую группу получил пользователь
+    current_group_index[user_id] = group_index
+    sent_groups[user_id] = group_index  # Сохраняем, чтобы избежать повторений
+    save_data()
+
+    # Обновляем глобальный индекс, если текущий пользователь получил самую свежую ссылку
+    global_group_index = max(global_group_index, group_index + 1)
+
+    # Удаляем старое сообщение с кнопкой
+    await bot.delete_message(chat_id=user_id, message_id=callback_query.message.message_id)
+
+    # Отправляем новую клавиатуру
+    await bot.send_message(user_id, "Что дальше?", reply_markup=get_user_keyboard())
